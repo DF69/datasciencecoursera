@@ -1,0 +1,119 @@
+##Assignment: Prediction Assignment Writeup
+
+*Author: Diego F. Rodriguez M.*
+
+##Executive Summary
+
+Using devices such as Jawbone Up, Nike Fuel Band, and Fit bit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here (see the section on the Weight Lifting Exercise Data set).
+
+##Data base
+
+There are two data sets: a training set and a test set for which 20 individuals without any classification for the class of exercise are available.
+
+The training data:
+
+*https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv*
+
+The test data:
+
+*https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv*
+
+
+##Data loading
+
+```{r dataLoad, echo=TRUE}
+dataTrain <- read.csv("pml-training.csv", header=TRUE, na.strings=c("NA", "#DIV/0!"))
+dataTest <- read.csv("pml-testing.csv", header=TRUE, na.string=c("NA", "#DIV/0!"))
+```
+
+##Data Cleaning
+
+Training data is processed and divided: the variables with at least one "NA" value are excluded from the analysis, as well as the variables related to time and user information. Then, the final total of variables is 51 and 19622 class measurements. In the case of test data the same number of variables are selected to be used for predicting the 20 test cases provided.
+
+```{r dataNA, echo=TRUE}
+## NA exclusion for the complete dataset
+dataTrainNA <- dataTrain[, apply(dataTrain, 2, function(x) !any(is.na(x)))] 
+dim(dataTrainNA)
+```
+
+```{r dataClean, echo=TRUE}
+## Exclusion of variables with user information, time and undefined
+dataTrainCl <- dataTrainNA[,-c(1:8)]
+dim(dataTrainCl)
+```
+
+```{r data20cases, echo=TRUE}
+## 20 test cases to validation
+dataTestCl <- dataTest[,names(dataTrainCl[,-52])]
+dim(dataTestCl)
+```
+
+##Data Partitioning and Prediction Process
+
+The data set cleaned is subset to create a test set independent from the 20 cases provided set. Partition defines two subsets of 75% of data to training set and a 25% of data to test set. Notice that this validation set will be held out at the end and the testing set will be used for all model selection only.
+
+```{r dataCaret1, cache=TRUE ,echo=TRUE}
+library(caret)
+partTrain <- createDataPartition(y=dataTrainCl$classe, p=0.75,list=FALSE)
+training <- dataTrainCl[partTrain,] 
+test<-dataTrainCl[-partTrain,] 
+# The dimensions of the raining and test sets
+dim(training)
+dim(test)
+```
+
+##Results and Conclusions
+
+A random forest trees is generated for the training data set using cross-validation. Then the algorithm resulting is examined under the partitioned training set to evaluate the accuracy and estimated error of prediction. By using 51 predictors for five classes (see below) using cross-validation at a 5-fold an accuracy of 99.2% with a 95% CI [0.989-0.994] is achieved (Kappa = 0.99).
+
+    1. Class A - exactly according to the specification,
+    2. Class B - throwing the elbows to the front,
+    3. Class C - lifting the dumbbell only halfway,
+    4. Class D - lowering the dumbbell only halfway, 
+    5. Class E - throwing the hips to the front.
+
+```{r dataCaret2, cache=TRUE, echo=TRUE}
+library(caret)
+library(e1071)
+set.seed(3333)
+control <- trainControl(method="cv", number=5, allowParallel=TRUE, verbose=TRUE)
+rf <- train(classe~., data=training, method="rf", trControl=control, verbose=FALSE)
+```
+
+```{r dataRF, cache=TRUE, echo=TRUE}
+rfPredict <- predict(rf, newdata=test)
+confusionMatrix(rfPredict, test$classe)
+```
+
+```{r data20, cache=TRUE, echo=TRUE}
+predict20 <- predict(rf, newdata=dataTestCl)
+# The prediction of the 20 cases provided
+predict20
+```
+
+```{r dataControl, cache=TRUE, echo=TRUE}
+control <- trainControl(method="cv", number=5, allowParallel=TRUE, verbose=TRUE)
+gbm <- train(classe~.,data=training, method="gbm", trControl=control, verbose=FALSE)
+gbm$finalModel
+class(gbm)
+gmbPredict <- predict(gbm, newdata=test)
+confusionMatrix(gmbPredict, test$classe)
+trainPredict <- predict(gbm, newdata=training)
+confusionMatrix(trainPredict, training$classe)
+trainPredict <- predict(gbm, newdata=training)
+confusionMatrix(trainPredict, training$classe)
+```
+
+20 cases are 20 hits which confirmed the accuracy of the resulting models.
+
+```{r data10, echo=TRUE}
+getwd()
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(predict20)
+```
